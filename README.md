@@ -1,62 +1,55 @@
-# Fantasy Hockey Matchup Analyzer
+# Fantasy Hockey Weekly Predictions
 
-**[Live demo →](#)** *(link goes here once deployed)*
+A running, public record of weekly fantasy hockey predictions — built on a probabilistic statistical model, tracked against real outcomes, and revised openly as the season goes on.
 
-A tool that answers a question most fantasy hockey apps don't: not just "who scores more points," but **how confident should you be**, and **where is your team actually vulnerable this week**.
+## The idea
 
-## The problem
+Most fantasy hockey tools give you a single projected point value per player and stop there. This project does two things differently:
 
-Most fantasy platforms project a single point value per player per week and call it a day. That throws away information: a player who's consistently good and a player who's boom-or-bust can have the same average projection but very different real value depending on whether you're trying to protect a lead or need a ceiling play. Standard tools also assume a fixed scoring system, which breaks down the moment your league uses custom categories or weights.
+1. **It models uncertainty, not just an average.** Every prediction comes with an explicit confidence level, based on both a player's expected performance and how consistent (or volatile) that performance has been — not just "Player A should score more," but "Player A has roughly a 70% chance of outproducing Player B this week."
+2. **It's honest about being wrong, on the record.** Each week, I make 2-3 concrete calls — which players or goalies I expect to perform well — log them *before* the games happen, and then go back afterward to check the outcome against the prediction. When a call misses, I look at whether it was normal variance (the model expected some chance of that) or an actual gap in the model, and only change the model in response to the latter.
 
-This tool models each player's output as a **distribution** (expected value + volatility), not a point estimate, and uses that to generate probabilistic, explainable recommendations for lineup decisions, goalie starts, and full-roster matchups — under whatever scoring system your league actually uses.
+The result is a season-long, dated log of predictions, outcomes, and reasoning — not a one-off tool, but a visible practice of building and refining a statistical model in public.
 
-## What it does (current version)
+## What this project is (and isn't)
 
-- **Custom scoring support** — define your league's scoring rules (points per goal, assist, shot, save, etc.) and every analysis below runs against *your* league's math, not a generic default.
-- **Matchup Analyzer** — compare two players (or two full lineups) and get a probability-based recommendation, with the underlying stats shown, not just a verdict.
-- **Goalie start/sit** — factors in back-to-back starts, opponent scoring rate, and home/away splits.
-- **Team-level matchup view** — input your roster and your opponent's roster for the week; get an overall win-probability estimate for the matchup, plus a breakdown of which positions you're favored or exposed at.
+- **Is:** a fantasy hockey performance model — predicting which players/goalies are likely to outperform others, with a stated confidence level.
+- **Isn't:** a game-outcome predictor (who wins the actual NHL game). That's a different, harder problem requiring team-strength modeling, and it's intentionally out of scope here so the project stays focused and well-calibrated rather than stretched thin.
 
-## How it works (the short version)
+## How a week works
 
-1. Pull raw per-game stats from the NHL's public API.
-2. Apply your league's scoring config to convert raw stats into fantasy points per game.
-3. Compute a rolling expected value (μ) and volatility (σ) per player, weighting recent games more heavily.
-4. Normalize across positions using z-scores, so a 2-point defenseman and a 2-point winger aren't treated as equivalent.
-5. Compare any two players (or two full rosters, summed) using a probability model: *what's the chance A outproduces B this week*, given both their expected value and their volatility.
+1. **Predict:** Before games are played, pick 2-3 players or goalies to call (e.g., "Goalie X is a strong start this week," "Player A over Player B for your active roster spot"), each with the underlying stats and a stated confidence level.
+2. **Log:** Commit the notebook with the prediction and timestamp before puck drop, so there's a clear, provable record that the call was made in advance.
+3. **Review:** After the games, revisit the same notebook (or the next week's) and record what actually happened.
+4. **Diagnose:** For any miss, explicitly assess whether it fell within the model's expected variance or represents a real gap in the model's reasoning.
+5. **Iterate (when warranted):** Only make a model change when there's a pattern across multiple weeks, not a reaction to a single result. Every change is logged with a reason.
 
-Full methodology, including the statistical reasoning and the simplifying assumptions I made deliberately (and why), is in [`METHODOLOGY.md`](#).
+See `METHODOLOGY.md` for the full statistical model behind this and how it's expected to evolve.
 
-## Tech stack
+## Repo structure
 
-- **Data:** NHL public API, pandas for all transformation and analysis
-- **Interface:** Streamlit (deployed via Streamlit Community Cloud)
-- **No black-box modeling in this version** — every number the tool outputs is traceable back to a stat you could look up yourself. That's intentional at this stage; see the roadmap below for where modeling comes in.
+```
+notebooks/          One notebook per week — prediction, then outcome review
+src/                 Reusable model code (scoring, stats, comparison logic), imported into each week's notebook
+config/              Scoring configuration(s) used to convert raw stats into fantasy points
+data/                Cached raw stat pulls (not committed in full — see .gitignore)
+SCOREBOARD.md        Running tally of predictions vs. outcomes and confidence calibration
+METHODOLOGY.md       The statistical model, its assumptions, and planned improvements
+future_directions/   Notes on extensions being considered but not yet built
+```
 
-## Example
+## Status
 
-*(Once built: a screenshot or worked example goes here — e.g., "Week 3: tool flagged Goalie X as a sit due to a back-to-back on the road against a top-5 offense; Goalie X posted a .870 SV% that night.")*
-
-## Roadmap — what's next this season
-
-This project is scoped deliberately: get a defensible, explainable statistical core shipped before the season starts, then layer in more sophisticated methods as more of the season's data becomes available to work with. Rough progression:
-
-- [ ] **Waiver wire trend detector** — flag players trending up relative to their own baseline and to their rostered %, using the same rolling-stat pipeline as the matchup analyzer. Not a "breakout predictor" — a trend signal.
-- [ ] **Projection model** — a simple, interpretable regression (not a black box) to improve the expected-value estimate using features beyond rolling average, e.g. ice time, shot rate, opponent strength. Feeds into the same downstream probability framework — doesn't replace it.
-- [ ] **Category league support** — extend custom scoring to head-to-head category formats, not just points leagues.
-- [ ] **Decision feedback loop** — log each recommendation's predicted confidence and the actual outcome, then check calibration over the season (did "70% confidence" calls actually hit ~70% of the time?). Requires a full season of logged decisions to be meaningful, which is why it's last.
-
-## Known simplifications
-
-Being upfront about the modeling choices:
-- Player performance is treated as approximately normally distributed for the probability comparisons. Real point totals are more right-skewed (mostly low counts, occasional big games) — a fine approximation at this scope, but not literally accurate.
-- Team-level variance is computed assuming rough independence across players' individual performances. Line combinations and game flow violate this a bit in reality; treated as a reasonable simplification rather than something correctable at this scope.
+Season-long, ongoing project. New notebook published weekly. `SCOREBOARD.md` reflects the latest tally.
 
 ## Running it locally
 
 ```bash
 git clone <repo-url>
-cd fantasy-hockey-analyzer
+cd fantasy-hockey-weekly-predictions
 pip install -r requirements.txt
-streamlit run app.py
+```
+
+Notebooks are built and run in Google Colab; they can also be run locally with Jupyter if you have the environment set up (`pip install notebook`).
+
 ```
