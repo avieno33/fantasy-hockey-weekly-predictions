@@ -1,6 +1,6 @@
 # Fantasy Hockey Weekly Predictions
 
-A running, public record of weekly fantasy hockey predictions — built on a probabilistic statistical model, tracked against real outcomes, and revised openly as the season goes on.
+A running, public record of weekly fantasy hockey predictions - built on a probabilistic statistical model, tracked against real outcomes, and revised openly as the season goes on.
 
 ## The idea
 
