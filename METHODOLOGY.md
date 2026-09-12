@@ -74,7 +74,7 @@ Being upfront about where this model is deliberately simple:
 - **This model predicts fantasy performance, not game outcomes.** It says nothing about which team wins the actual game — that's a separate, harder problem (team-strength modeling) that's intentionally out of scope so this stays focused.
 - **Not every scoreable category is available from the data source.** Faceoffs won and lost (FW, FL) aren't obtainable as raw counts from this project's data source — only a faceoff win percentage exists, which can't be split back into wins and losses. These categories are excluded from scoring rather than approximated. Hits and blocked shots (HIT, BLK) are supported, but required a second data pull (a per-game boxscore) beyond the basic game log — worth knowing scoring isn't sourced from one single unified endpoint.
 - **Incomplete or partial appearances are handled explicitly, not dropped by default.** A goalie relief appearance with no official decision recorded, for example, still contributes its real save and goals-against stats to scoring rather than being excluded outright for having one missing field.
-- - **No adjustment for opportunity or context.** Ice time, team pace, and
+-  **No adjustment for opportunity or context.** Ice time, team pace, and
   strength of schedule aren't factored in, the model measures realized
   production, not production adjusted for role or opponent quality. A
   sudden role change (more ice time, a new linemate) won't be reflected
