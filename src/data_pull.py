@@ -65,24 +65,41 @@ def name_similarity(a, b):
 
 def get_player_id(player_name, min_similarity=0.75):
     """
-    Looks up a single player's NHL API id by name. Always prints the
-    matched name back, so a typo resolving to the wrong player is
-    visible immediately rather than silently producing a plausible
-    but wrong result. Warns explicitly if the best match looks weak.
+    Looks up a single player's NHL API id by name. Tries an active-only
+    search first, and if the best match looks weak, retries without the
+    active filter, since a player with an unusual season (an injury,
+    a leave of absence, a return with a new team) can be excluded from
+    the active-only search and cause a false match otherwise. Always
+    prints the matched name, so a mismatch is visible immediately.
     """
-    url = "https://search.d3.nhle.com/api/v1/search/player"
-    params = {"culture": "en-us", "limit": 5, "q": player_name, "active": "true"}
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    results = response.json()
+    def search(active_only):
+        url = "https://search.d3.nhle.com/api/v1/search/player"
+        params = {"culture": "en-us", "limit": 5, "q": player_name}
+        if active_only:
+            params["active"] = "true"
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        return response.json()
 
-    if not results:
+    results = search(active_only=True)
+    scored = [(r, name_similarity(player_name, r["name"])) for r in results]
+
+    best_match, best_score = (max(scored, key=lambda pair: pair[1]) if scored else (None, 0))
+
+    if best_score < min_similarity:
+        # active-only search gave a weak match, try without the filter
+        fallback_results = search(active_only=False)
+        fallback_scored = [(r, name_similarity(player_name, r["name"])) for r in fallback_results]
+        if fallback_scored:
+            fallback_best, fallback_score = max(fallback_scored, key=lambda pair: pair[1])
+            if fallback_score > best_score:
+                best_match, best_score = fallback_best, fallback_score
+                print(f"Note, '{player_name}' wasn't found in the active-only search, "
+                      f"matched via a broader search instead")
+
+    if best_match is None:
         print(f"No player found matching '{player_name}'")
         return None
-
-    scored = [(r, name_similarity(player_name, r["name"])) for r in results]
-    scored.sort(key=lambda pair: pair[1], reverse=True)
-    best_match, best_score = scored[0]
 
     if best_score < min_similarity:
         print(f"Warning, low-confidence match for '{player_name}', best guess was "
@@ -91,7 +108,6 @@ def get_player_id(player_name, min_similarity=0.75):
         print(f"Matched '{player_name}' to '{best_match['name']}'")
 
     return int(best_match["playerId"])
-
 
 # --- game logs -----------------------------------------------------------
 
