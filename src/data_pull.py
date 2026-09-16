@@ -73,7 +73,7 @@ def get_player_id(player_name):
     if not results:
         print(f"No player found matching '{player_name}'")
         return None
-    return results[0]["playerId"]
+    return int(results[0]["playerId"])
 
 
 # --- game logs -----------------------------------------------------------
