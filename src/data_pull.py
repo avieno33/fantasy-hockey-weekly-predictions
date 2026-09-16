@@ -13,6 +13,8 @@ from datetime import datetime
 import pandas as pd
 import requests
 
+from difflib import SequenceMatcher
+
 CACHE_DIR = "data"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
@@ -58,22 +60,37 @@ CURRENT_SEASON = get_current_season()
 
 # --- player lookup -----------------------------------------------------
 
-def get_player_id(player_name):
+def name_similarity(a, b):
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+def get_player_id(player_name, min_similarity=0.75):
     """
-    Looks up a single player's NHL API id by name. Lighter than pulling
-    every team's full roster, useful when you already know which
-    specific players you need (as week01 does), rather than needing
-    the full league-wide player table.
+    Looks up a single player's NHL API id by name. Always prints the
+    matched name back, so a typo resolving to the wrong player is
+    visible immediately rather than silently producing a plausible
+    but wrong result. Warns explicitly if the best match looks weak.
     """
     url = "https://search.d3.nhle.com/api/v1/search/player"
     params = {"culture": "en-us", "limit": 5, "q": player_name, "active": "true"}
     response = requests.get(url, params=params)
     response.raise_for_status()
     results = response.json()
+
     if not results:
         print(f"No player found matching '{player_name}'")
         return None
-    return int(results[0]["playerId"])
+
+    scored = [(r, name_similarity(player_name, r["name"])) for r in results]
+    scored.sort(key=lambda pair: pair[1], reverse=True)
+    best_match, best_score = scored[0]
+
+    if best_score < min_similarity:
+        print(f"Warning, low-confidence match for '{player_name}', best guess was "
+              f"'{best_match['name']}' (similarity {best_score:.2f}), double check this is right")
+    else:
+        print(f"Matched '{player_name}' to '{best_match['name']}'")
+
+    return int(best_match["playerId"])
 
 
 # --- game logs -----------------------------------------------------------
