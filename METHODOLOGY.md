@@ -39,7 +39,7 @@ where `n_current` is the number of current-season games observed, `current_μ` i
 
 v1 uses `k = 10`. Like the EWMA half-life, this was chosen by comparing how different values behaved on real season data, a small `k` overreacts to hot or cold stretches that are ultimately just noise, a large `k` is slower to recognize a real, sustained change in a player's level. `k = 10` sits in between. Also a judgment call, not derived mathematically, and open to tuning based on actual calibration once real predictions accumulate.
 
-**Important — this uses the flat cumulative mean, not the EWMA from Section 1.** These were tested combined during development (blending the prior with the EWMA value directly, hoping for one number that's both recency-weighted and prior-informed), and that combination doesn't work: EWMA's weighting stays constant regardless of how many games have been played, so it never stops reacting to recent streaks, while a flat mean's sensitivity to any single new game naturally shrinks as `1/n`, stabilizing over the season. EWMA and shrinkage are answering genuinely different questions, EWMA answers "how is this player doing right now, recently," shrinkage answers "what is this player's underlying level this season, overall." Both get computed and used, but kept separate, not combined into one number.
+**Important: this uses the flat cumulative mean, not the EWMA from Section 1.** These were tested combined during development (blending the prior with the EWMA value directly, hoping for one number that's both recency-weighted and prior-informed), and that combination doesn't work: EWMA's weighting stays constant regardless of how many games have been played, so it never stops reacting to recent streaks, while a flat mean's sensitivity to any single new game naturally shrinks as `1/n`, stabilizing over the season. EWMA and shrinkage are answering genuinely different questions, EWMA answers "how is this player doing right now, recently," shrinkage answers "what is this player's underlying level this season, overall." Both get computed and used, but kept separate, not combined into one number.
 
 This is a simplified form of a shrinkage estimator (related to empirical Bayes methods): early estimates lean on outside information, and lean less as more direct evidence comes in.
 
@@ -146,7 +146,7 @@ These aren't commitments on a timeline, they're the directions under considerati
 - **Skater opponent-strength adjustment**, mirroring the goalie version using opponent goals/shots-against. Next priority once the base model is stable, see `future_directions/opponent_strength_for_skaters.md`.
 - **Wiring individual goalie slopes into the main estimate**, pending further validation of the partial-pooling approach and resolving the circularity concern noted above.
 - **Category league support**, extending custom scoring beyond points leagues to head-to-head category formats, see `future_directions/category_league_support.md`.
-- **Better μ estimate via lightweight regression.** Instead of (blended) rolling average, a simple, interpretable model (e.g., ridge regression) using a few added features, ice time, shot rate, opponent defensive strength, to estimate expected performance. This would replace *only* the μ estimate; the σ/z-score/P(A>B) machinery downstream stays the same. Kept intentionally simple (not a large model) because the amount of public per-player data available doesn't support anything more complex without overfitting.
+- **Better μ estimate via lightweight regression.** Instead of (blended) rolling average, a simple, interpretable model (e.g., ridge regression) using a few added features, ice time, shot rate, opponent defensive strength, to estimate expected performance. This would replace *only* the μ estimate; the σ/P(A>B) machinery downstream stays the same. Kept intentionally simple (not a large model) because the amount of public per-player data available doesn't support anything more complex without overfitting.
 - **Tuning `k` and the EWMA half-life empirically**, rather than by comparison alone, e.g., checking which values would have produced the best-calibrated predictions against past data.
 
 ### Longer-term / larger changes, worth naming honestly as "maybe"
@@ -155,10 +155,20 @@ These aren't commitments on a timeline, they're the directions under considerati
 - **Team-level matchup view.** Aggregating predicted μ/σ across a full projected lineup (yours vs. an opponent's) to produce an overall weekly matchup confidence and flag positions of relative weakness. Uses the same math as above, just summed across a roster.
 - **A learned team-strength rating** (Elo-style, updating game by game based on outcomes), rather than a rolling or pooled average, see `future_directions/team_strength_rating_model.md`.
 - **Faceoff scoring**, if a data source with raw won/lost counts (rather than just a percentage) is found.
-- **Injury / missed-game detection**, comparing a player's game log against their team's schedule to flag unexplained absences, see `future_directions/injury_status_detection.md`.
+- **Injury / missed-game detection**, comparing a player's gamThis would replace *only* the μ estimate; the σ/P(A>B) machinery
+downstream stays the same.e log against their team's schedule to flag unexplained absences, see `future_directions/injury_status_detection.md`.
 
 ---
 
 ## Version History
 
-- **v1** (current) — rolling EWMA μ (half-life 5) for recent form, flat cumulative mean blended with prior-season stats (k=10) for early-season shrinkage, positional z-scores, P(A>B) comparison model with formal correctness checks, goalie opponent shot-volume adjustment (league-wide, based on a tested shots-vs-save-percentage relationship). Back-to-back adjustment tested and found statistically insignificant, not implemented. Skater opponent-strength adjustment not yet built.
+- **v1** (current) — rolling EWMA μ (half-life 5) for recent form, flat
+  cumulative mean blended with prior-season stats (k=10) for
+  early-season shrinkage, P(A>B) comparison model derived from the
+  normal-difference property with formal correctness checks, goalie
+  opponent shot-volume adjustment (league-wide, based on a tested
+  shots-vs-save-percentage relationship). Cross-position z-scoring
+  planned but not implemented, turned out unnecessary for head-to-head
+  comparison (see Section 3). Back-to-back adjustment tested and found
+  statistically insignificant, not implemented. Skater
+  opponent-strength adjustment not yet built.
