@@ -43,29 +43,72 @@ v1 uses `k = 10`. Like the EWMA half-life, this was chosen by comparing how diff
 
 This is a simplified form of a shrinkage estimator (related to empirical Bayes methods): early estimates lean on outside information, and lean less as more direct evidence comes in.
 
-### 3. Cross-position comparability: z-scores
+### 3. Cross-position comparability
 
-Raw fantasy points aren't comparable across positions, a defenseman's 2 points/game and a winger's 2 points/game don't mean the same thing. Each player's μ is converted into a **z-score relative to their position group**:
+Raw fantasy points aren't comparable across positions, a defenseman's
+2 points/game and a winger's 2 points/game don't mean the same thing.
+The original plan for this was to convert each player's μ into a
+**z-score relative to their position group** (z = (player_μ −
+position_group_mean) / position_group_std), giving one comparable
+scale across the whole roster.
 
-```
-z = (player_μ − position_group_mean) / position_group_std
-```
-
-This gives one comparable scale across the whole roster.
+In practice, this was never implemented, and it turned out not to be
+necessary. The actual comparison approach (Section 4) evaluates any
+two specific players directly against each other using their own μ
+and σ, it never needs to place either one on a shared, position-
+normalized scale to do that, whoever they're being compared against
+already defines the relevant context. Z-scoring would only matter for
+a different kind of question this model doesn't currently answer,
+ranking every rostered player on one list regardless of position
+(e.g., "best available player, any position"), rather than a specific
+head-to-head call. Left here as a documented, deliberately unbuilt
+piece rather than removed outright, since it may become relevant if a
+cross-position ranking feature gets built later.
 
 ### 4. Comparing two players: probability, not just a bigger number
 
-For any head-to-head call (start/sit, trade, waiver pickup), the model doesn't just compare averages, it computes the **probability that one player outperforms another**, treating each player's per-game output as approximately normally distributed:
+For any head-to-head call (start/sit, trade, waiver pickup), the model
+doesn't just compare averages, it computes the **probability that one
+player outperforms another**, treating each player's per-game output
+as approximately normally distributed:
 
-```
 P(A > B) = Φ( (μ_A − μ_B) / sqrt(σ_A² + σ_B²) )
-```
 
-where Φ is the standard normal cumulative distribution function. This is the number reported as "confidence" in each weekly pick, e.g., a 68% call means the model estimates a 68% chance A outperforms B, not a guarantee.
+where Φ is the standard normal cumulative distribution function. This
+is the number reported as "confidence" in each weekly pick, e.g., a
+68% call means the model estimates a 68% chance A outperforms B, not
+a guarantee.
 
-The comparison function is tested against a set of properties any correct version must satisfy regardless of the specific players involved: P(A>B) and P(B>A) must sum to exactly 1, two identical players must give exactly 50%, a strictly higher μ with equal σ must push above 50%, more volatility with the same μ gap must pull the result closer to 50%, and zero volatility on both sides must resolve deterministically rather than dividing by zero.
+**Where this comes from.** If A ~ N(μ_A, σ_A²) and B ~ N(μ_B, σ_B²),
+and their outcomes are treated as independent, their difference D = A
+− B is itself normally distributed, with mean μ_A − μ_B and variance
+σ_A² + σ_B² (variances add when combining independent random
+quantities, whether adding or subtracting them). P(A > B) is the same
+question as P(D > 0), and standardizing D into a standard normal
+variable, using the symmetry of the normal distribution around zero,
+gives exactly the formula above.
 
-Worth being precise about what this probability claims: it's P(A outperforms B) in one game, not "who is the better player overall." Even a large talent gap can produce a modest single-game probability, since per-game variance is large for everyone in this sport, this is correct behavior, not a flaw.
+Worth being explicit about the independence assumption baked in here.
+For two players on different teams in a given week, treating their
+outcomes as independent is reasonable. It becomes a real
+simplification if the two players are teammates or otherwise likely
+to be correlated (e.g., both benefiting from the same power play),
+the same independence assumption already flagged for team-level
+aggregation elsewhere in this document.
+
+The comparison function is tested against a set of properties any
+correct version must satisfy regardless of the specific players
+involved: P(A>B) and P(B>A) must sum to exactly 1, two identical
+players must give exactly 50%, a strictly higher μ with equal σ must
+push above 50%, more volatility with the same μ gap must pull the
+result closer to 50%, and zero volatility on both sides must resolve
+deterministically rather than dividing by zero.
+
+Worth being precise about what this probability claims: it's P(A
+outperforms B) in one game, not "who is the better player overall."
+Even a large talent gap can produce a modest single-game probability,
+since per-game variance is large for everyone in this sport, this is
+correct behavior, not a flaw.
 
 ### 5. Goalies
 
