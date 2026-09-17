@@ -1,6 +1,8 @@
 # Fantasy Hockey Weekly Predictions
 
-A running, public record of weekly fantasy hockey predictions - built on a probabilistic statistical model, tracked against real outcomes, and revised openly as the season goes on.
+Like many sports fans, I love fantasy sports, whether it be hockey, baseball, basketball, or football, I cannot wait for the next season to start, and to draft my favourite players. But also like many sports fans, my results are wildly inconsistent. Some seasons I go 16-5 and win my league with ease, other seasons I go 6-15 and barely scrape into the playoffs. That inconsistency got me thinking, what if I put my math degree to actual use, dust off and sharpen my statistical skills, and build something that could genuinely help. With hockey season approaching fast, that seemed like the obvious place to start.
+
+The idea is a running, public record of weekly fantasy hockey predictions, built on a probabilistic statistical model, tracked against real outcomes, and revised openly as the season goes on.
 
 ## The idea
 
@@ -37,14 +39,16 @@ See `METHODOLOGY.md` for the full statistical model behind this and how it's exp
 ```
 notebooks/           00_building_the_model.ipynb (the base model, start here),
                       then one notebook per week - prediction, then outcome review
+src/                  Reusable model functions (data pull, scoring, stats, matchup
+                      comparison), imported into each week's notebook
+tests/                test_src.ipynb, regression tests confirming src/ reproduces
+                      known-good results from the base notebook
 config/               Scoring configuration(s) used to convert raw stats into fantasy points
 data/                 Cached raw stat pulls (not committed in full, see .gitignore)
 SCOREBOARD.md         Running tally of predictions vs. outcomes and confidence calibration
 METHODOLOGY.md        The statistical model, its assumptions, and planned improvements
 future_directions/    Notes on extensions being considered, tested and shelved, or planned
 ```
-
-Reusable model code currently lives directly in `00_building_the_model.ipynb` rather than a separate `src/` module, it may get pulled out once the functions stabilize, but for now everything's kept together in one place while still actively changing.
 
 ## Status
 
