@@ -6,14 +6,14 @@ The model is versioned. Changes are only made in response to a *pattern* across 
 
 ---
 
-## v1 — Base model
+## v1: Base model
 
 ### 1. Expected value and volatility per player
 
 For each player (or goalie), two numbers are tracked, not one:
 
-- **μ (mu) — expected fantasy performance**, a rolling average of fantasy points per game.
-- **σ (sigma) — volatility**, the standard deviation of fantasy points per game over the same window.
+- **μ (mu) - expected fantasy performance**, a rolling average of fantasy points per game.
+- **σ (sigma) - volatility**, the standard deviation of fantasy points per game over the same window.
 
 Modeling both matters because two players can have the same average production and completely different reliability, a consistent 3-point/game player and a boom-or-bust 3-point/game player are different fantasy assets, even though a simple projection would treat them identically.
 
@@ -138,7 +138,7 @@ Being upfront about where this model is deliberately simple:
 
 ---
 
-## Where this is likely to go — planned directions
+## Where this is likely to go - planned directions
 
 These aren't commitments on a timeline, they're the directions under consideration, to be pursued if the weekly review process surfaces a real, repeated gap in v1 (per the versioning rule above).
 
@@ -162,7 +162,7 @@ downstream stays the same.e log against their team's schedule to flag unexplaine
 
 ## Version History
 
-- **v1** (current) — rolling EWMA μ (half-life 5) for recent form, flat
+- **v1** (current) - rolling EWMA μ (half-life 5) for recent form, flat
   cumulative mean blended with prior-season stats (k=10) for
   early-season shrinkage, P(A>B) comparison model derived from the
   normal-difference property with formal correctness checks, goalie
