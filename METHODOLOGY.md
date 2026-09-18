@@ -110,6 +110,18 @@ Even a large talent gap can produce a modest single-game probability,
 since per-game variance is large for everyone in this sport, this is
 correct behavior, not a flaw.
 
+**Which μ/σ feeds this:** by default, the shrinkage-blended
+season_mu/season_sigma from Section 2, not the EWMA recent_mu/
+recent_sigma from Section 1. Both get computed for every player, but
+only the season-level estimate is used in the head-to-head comparison
+by default, since it's the more stable, defensible number to build a
+probability on. EWMA is used separately, as a standalone signal for
+spotting a player trending relative to their own baseline (see the
+sleeper picks approach in the weekly notebooks), not as an input to
+this formula. The comparison function does support running on the
+recent-form pair instead (a `use` parameter), but this isn't the
+default and isn't currently exercised in weekly predictions.
+
 ### 5. Goalies
 
 Goalies use the same μ/σ/P(A>B) structure as skaters, built from save percentage and goals-against rather than skater scoring stats. Two further adjustments were investigated, following the same standard as the rest of this model, measure the effect against real season data before building anything, don't assume it just because it's intuitive.
@@ -155,8 +167,9 @@ These aren't commitments on a timeline, they're the directions under considerati
 - **Team-level matchup view.** Aggregating predicted μ/σ across a full projected lineup (yours vs. an opponent's) to produce an overall weekly matchup confidence and flag positions of relative weakness. Uses the same math as above, just summed across a roster.
 - **A learned team-strength rating** (Elo-style, updating game by game based on outcomes), rather than a rolling or pooled average, see `future_directions/team_strength_rating_model.md`.
 - **Faceoff scoring**, if a data source with raw won/lost counts (rather than just a percentage) is found.
-- **Injury / missed-game detection**, comparing a player's gamThis would replace *only* the μ estimate; the σ/P(A>B) machinery
-downstream stays the same.e log against their team's schedule to flag unexplained absences, see `future_directions/injury_status_detection.md`.
+- **Injury / missed-game detection**, comparing a player's game log
+  against their team's schedule to flag unexplained absences, see
+  `future_directions/injury_status_detection.md`.
 
 ---
 
