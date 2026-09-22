@@ -12,14 +12,26 @@ The model is versioned. Changes are only made in response to a *pattern* across 
 
 For each player (or goalie), two numbers are tracked, not one:
 
-- **μ (mu) - expected fantasy performance**, a rolling average of fantasy points per game.
-- **σ (sigma) - volatility**, the standard deviation of fantasy points per game over the same window.
+- $\mu$ **(mu) - expected fantasy performance**, a rolling average of fantasy points per game.
+- $\sigma$ **(sigma) - volatility**, the standard deviation of fantasy points per game over the same window.
 
 Modeling both matters because two players can have the same average production and completely different reliability, a consistent 3-point/game player and a boom-or-bust 3-point/game player are different fantasy assets, even though a simple projection would treat them identically.
 
 **Recency weighting:** rather than a flat average over the window, more recent games are weighted more heavily, using an **exponentially weighted moving average (EWMA)**. An EWMA is a running average where each new observation gets a fixed weight, and every past observation's weight decays exponentially the further back it goes, so the most recent game always counts the most, and a game from a while ago still counts, just less. This is different from a flat average, where every game in the window counts equally, and different from a simple cutoff (like "last 10 games only"), where a game either counts fully or not at all.
 
-Concretely, at each new game, mu updates as `new_mu = alpha × latest_game + (1 - alpha) × old_mu`, where alpha is a weight between 0 and 1. Rather than picking alpha directly, it's set here via a half-life of 5 games, meaning a game from 5 games ago carries half the weight of the most recent game, a game from 10 games ago a quarter, and so on. This reflects the reality that hockey performance is streaky, role changes, hot lines, and recovery from injury all make recent games more informative than games from a month ago.
+Concretely, at each new game, $\mu$ updates as:
+
+$$
+\mu_{\text{new}} = \alpha \cdot x_{\text{latest}} + (1 - \alpha) \cdot \mu_{\text{old}}
+$$
+
+where $\alpha$ is a weight between 0 and 1, and $x_{\text{latest}}$ is the most recent game's fantasy points. Rather than picking $\alpha$ directly, it's set here via a half-life of 5 games, meaning a game from 5 games ago carries half the weight of the most recent game, a game from 10 games ago a quarter, and so on. Formally, the half-life $h$ and $\alpha$ are related by:
+
+$$
+\alpha = 1 - \left(\frac{1}{2}\right)^{1/h}
+$$
+
+This reflects the reality that hockey performance is streaky, role changes, hot lines, and recovery from injury all make recent games more informative than games from a month ago.
 
 To highlight this, think of one of my favourite baseball players, George Springer. He is a career .245 hitter in March and April, by a wide margin his worst month, and posts a higher OPS in essentially every other month of the season. Similarly, one of my favourite hockey players, Filip Forsberg, shows a similar career-long pattern, across his career he's produced 0.93 points per game before the All-Star break and 1.10 points per game after it, and his worst individual month by production rate is October, the start of the season, while his best is March, near the end of it. A flat, season-long average would blend these very different stretches into one number that doesn't reflect how either player was actually performing at any given point in the season. EWMA is built specifically to avoid that, weighting recent games more heavily so the estimate tracks a player's current form, not a smoothed-over season-long blend.
 
@@ -27,110 +39,81 @@ The half-life of 5 is a judgment call, not derived mathematically, chosen by com
 
 ### 2. Early-season shrinkage (handling small samples)
 
-Early in the season, there are too few current-season games to compute a stable μ or σ, a standard deviation from 2-3 games is close to meaningless and would produce overconfident, misleading predictions if used directly.
+Early in the season, there are too few current-season games to compute a stable $\mu$ or $\sigma$, a standard deviation from 2-3 games is close to meaningless and would produce overconfident, misleading predictions if used directly.
 
 **Fix:** blend last season's full-season stats (the *prior*) with a **flat cumulative mean** of the current season's games so far, weighting the current season more heavily as more games accumulate:
 
-```
-blended_μ = (n_current × current_μ + k × prior_μ) / (n_current + k)
-```
+$$
+\mu_{\text{blended}} = \frac{n_{\text{current}} \cdot \mu_{\text{current}} + k \cdot \mu_{\text{prior}}}{n_{\text{current}} + k}
+$$
 
-where `n_current` is the number of current-season games observed, `current_μ` is the plain, unweighted average of fantasy points across those games, and `k` is a constant controlling how much weight the prior gets early on (higher `k` = trust the prior longer). The same blending is applied to σ. As the season progresses and `n_current` grows, the prior's influence fades out naturally.
+where $n_{\text{current}}$ is the number of current-season games observed, $\mu_{\text{current}}$ is the plain, unweighted average of fantasy points across those games, and $k$ is a constant controlling how much weight the prior gets early on (higher $k$ = trust the prior longer). The same blending is applied to $\sigma^2$:
 
-v1 uses `k = 10`. Like the EWMA half-life, this was chosen by comparing how different values behaved on real season data, a small `k` overreacts to hot or cold stretches that are ultimately just noise, a large `k` is slower to recognize a real, sustained change in a player's level. `k = 10` sits in between. Also a judgment call, not derived mathematically, and open to tuning based on actual calibration once real predictions accumulate.
+$$
+\sigma^2_{\text{blended}} = \frac{n_{\text{current}} \cdot \sigma^2_{\text{current}} + k \cdot \sigma^2_{\text{prior}}}{n_{\text{current}} + k}
+$$
 
-**Important: this uses the flat cumulative mean, not the EWMA from Section 1.** These were tested combined during development (blending the prior with the EWMA value directly, hoping for one number that's both recency-weighted and prior-informed), and that combination doesn't work: EWMA's weighting stays constant regardless of how many games have been played, so it never stops reacting to recent streaks, while a flat mean's sensitivity to any single new game naturally shrinks as `1/n`, stabilizing over the season. EWMA and shrinkage are answering genuinely different questions, EWMA answers "how is this player doing right now, recently," shrinkage answers "what is this player's underlying level this season, overall." Both get computed and used, but kept separate, not combined into one number.
+As the season progresses and $n_{\text{current}}$ grows, the prior's influence fades out naturally.
+
+v1 uses $k = 10$. Like the EWMA half-life, this was chosen by comparing how different values behaved on real season data, a small $k$ overreacts to hot or cold stretches that are ultimately just noise, a large $k$ is slower to recognize a real, sustained change in a player's level. $k = 10$ sits in between. Also a judgment call, not derived mathematically, and open to tuning based on actual calibration once real predictions accumulate.
+
+**Important: this uses the flat cumulative mean, not the EWMA from Section 1.** These were tested combined during development (blending the prior with the EWMA value directly, hoping for one number that's both recency-weighted and prior-informed), and that combination doesn't work: EWMA's weighting stays constant regardless of how many games have been played, so it never stops reacting to recent streaks, while a flat mean's sensitivity to any single new game naturally shrinks as $1/n$, stabilizing over the season. EWMA and shrinkage are answering genuinely different questions, EWMA answers "how is this player doing right now, recently," shrinkage answers "what is this player's underlying level this season, overall." Both get computed and used, but kept separate, not combined into one number.
 
 This is a simplified form of a shrinkage estimator (related to empirical Bayes methods): early estimates lean on outside information, and lean less as more direct evidence comes in.
 
 ### 3. Cross-position comparability
 
-Raw fantasy points aren't comparable across positions, a defenseman's
-2 points/game and a winger's 2 points/game don't mean the same thing.
-The original plan for this was to convert each player's μ into a
-**z-score relative to their position group** (z = (player_μ −
-position_group_mean) / position_group_std), giving one comparable
-scale across the whole roster.
+Raw fantasy points aren't comparable across positions, a defenseman's 2 points/game and a winger's 2 points/game don't mean the same thing. The original plan for this was to convert each player's $\mu$ into a **z-score relative to their position group**:
 
-In practice, this was never implemented, and it turned out not to be
-necessary. The actual comparison approach (Section 4) evaluates any
-two specific players directly against each other using their own μ
-and σ, it never needs to place either one on a shared, position-
-normalized scale to do that, whoever they're being compared against
-already defines the relevant context. Z-scoring would only matter for
-a different kind of question this model doesn't currently answer,
-ranking every rostered player on one list regardless of position
-(e.g., "best available player, any position"), rather than a specific
-head-to-head call. Left here as a documented, deliberately unbuilt
-piece rather than removed outright, since it may become relevant if a
-cross-position ranking feature gets built later.
+$$
+z = \frac{\mu_{\text{player}} - \mu_{\text{position group}}}{\sigma_{\text{position group}}}
+$$
+
+giving one comparable scale across the whole roster.
+
+In practice, this was never implemented, and it turned out not to be necessary. The actual comparison approach (Section 4) evaluates any two specific players directly against each other using their own $\mu$ and $\sigma$, it never needs to place either one on a shared, position-normalized scale to do that, whoever they're being compared against already defines the relevant context. Z-scoring would only matter for a different kind of question this model doesn't currently answer, ranking every rostered player on one list regardless of position (e.g., "best available player, any position"), rather than a specific head-to-head call. Left here as a documented, deliberately unbuilt piece rather than removed outright, since it may become relevant if a cross-position ranking feature gets built later.
 
 ### 4. Comparing two players: probability, not just a bigger number
 
-For any head-to-head call (start/sit, trade, waiver pickup), the model
-doesn't just compare averages, it computes the **probability that one
-player outperforms another**, treating each player's per-game output
-as approximately normally distributed:
+For any head-to-head call (start/sit, trade, waiver pickup), the model doesn't just compare averages, it computes the **probability that one player outperforms another**, treating each player's per-game output as approximately normally distributed:
 
-P(A > B) = Φ( (μ_A − μ_B) / sqrt(σ_A² + σ_B²) )
+$$
+P(A > B) = \Phi\left(\frac{\mu_A - \mu_B}{\sqrt{\sigma_A^2 + \sigma_B^2}}\right)
+$$
 
-where Φ is the standard normal cumulative distribution function. This
-is the number reported as "confidence" in each weekly pick, e.g., a
-68% call means the model estimates a 68% chance A outperforms B, not
-a guarantee.
+where $\Phi$ is the standard normal cumulative distribution function. This is the number reported as "confidence" in each weekly pick, e.g., a 68% call means the model estimates a 68% chance $A$ outperforms $B$, not a guarantee.
 
-**Where this comes from.** If A ~ N(μ_A, σ_A²) and B ~ N(μ_B, σ_B²),
-and their outcomes are treated as independent, their difference D = A
-− B is itself normally distributed, with mean μ_A − μ_B and variance
-σ_A² + σ_B² (variances add when combining independent random
-quantities, whether adding or subtracting them). P(A > B) is the same
-question as P(D > 0), and standardizing D into a standard normal
-variable, using the symmetry of the normal distribution around zero,
-gives exactly the formula above.
+**Where this comes from.** If $A \sim N(\mu_A, \sigma_A^2)$ and $B \sim N(\mu_B, \sigma_B^2)$, and their outcomes are treated as independent, their difference $D = A - B$ is itself normally distributed:
 
-Worth being explicit about the independence assumption baked in here.
-For two players on different teams in a given week, treating their
-outcomes as independent is reasonable. It becomes a real
-simplification if the two players are teammates or otherwise likely
-to be correlated (e.g., both benefiting from the same power play),
-the same independence assumption already flagged for team-level
-aggregation elsewhere in this document.
+$$
+D \sim N\left(\mu_A - \mu_B,\ \sigma_A^2 + \sigma_B^2\right)
+$$
 
-The comparison function is tested against a set of properties any
-correct version must satisfy regardless of the specific players
-involved: P(A>B) and P(B>A) must sum to exactly 1, two identical
-players must give exactly 50%, a strictly higher μ with equal σ must
-push above 50%, more volatility with the same μ gap must pull the
-result closer to 50%, and zero volatility on both sides must resolve
-deterministically rather than dividing by zero.
+(variances add when combining independent random quantities, whether adding or subtracting them). $P(A > B)$ is the same question as $P(D > 0)$, and standardizing $D$ into a standard normal variable, using the symmetry of the normal distribution around zero, gives exactly the formula above.
 
-Worth being precise about what this probability claims: it's P(A
-outperforms B) in one game, not "who is the better player overall."
-Even a large talent gap can produce a modest single-game probability,
-since per-game variance is large for everyone in this sport, this is
-correct behavior, not a flaw.
+Worth being explicit about the independence assumption baked in here. For two players on different teams in a given week, treating their outcomes as independent is reasonable. It becomes a real simplification if the two players are teammates or otherwise likely to be correlated (e.g., both benefiting from the same power play), the same independence assumption already flagged for team-level aggregation elsewhere in this document.
 
-**Which μ/σ feeds this:** by default, the shrinkage-blended
-season_mu/season_sigma from Section 2, not the EWMA recent_mu/
-recent_sigma from Section 1. Both get computed for every player, but
-only the season-level estimate is used in the head-to-head comparison
-by default, since it's the more stable, defensible number to build a
-probability on. EWMA is used separately, as a standalone signal for
-spotting a player trending relative to their own baseline (see the
-sleeper picks approach in the weekly notebooks), not as an input to
-this formula. The comparison function does support running on the
-recent-form pair instead (a `use` parameter), but this isn't the
-default and isn't currently exercised in weekly predictions.
+The comparison function is tested against a set of properties any correct version must satisfy regardless of the specific players involved: $P(A>B)$ and $P(B>A)$ must sum to exactly 1, two identical players must give exactly 50%, a strictly higher $\mu$ with equal $\sigma$ must push above 50%, more volatility with the same $\mu$ gap must pull the result closer to 50%, and zero volatility on both sides must resolve deterministically rather than dividing by zero.
+
+Worth being precise about what this probability claims: it's $P(A \text{ outperforms } B)$ in one game, not "who is the better player overall." Even a large talent gap can produce a modest single-game probability, since per-game variance is large for everyone in this sport, this is correct behavior, not a flaw.
+
+**Which $\mu$/$\sigma$ feeds this:** by default, the shrinkage-blended $\mu_{\text{season}}$/$\sigma_{\text{season}}$ from Section 2, not the EWMA $\mu_{\text{recent}}$/$\sigma_{\text{recent}}$ from Section 1. Both get computed for every player, but only the season-level estimate is used in the head-to-head comparison by default, since it's the more stable, defensible number to build a probability on. EWMA is used separately, as a standalone signal for spotting a player trending relative to their own baseline (see the sleeper picks approach in the weekly notebooks), not as an input to this formula. The comparison function does support running on the recent-form pair instead (a `use` parameter), but this isn't the default and isn't currently exercised in weekly predictions.
 
 ### 5. Goalies
 
-Goalies use the same μ/σ/P(A>B) structure as skaters, built from save percentage and goals-against rather than skater scoring stats. Two further adjustments were investigated, following the same standard as the rest of this model, measure the effect against real season data before building anything, don't assume it just because it's intuitive.
+Goalies use the same $\mu$/$\sigma$/$P(A>B)$ structure as skaters, built from save percentage and goals-against rather than skater scoring stats. Two further adjustments were investigated, following the same standard as the rest of this model, measure the effect against real season data before building anything, don't assume it just because it's intuitive.
 
-**Back-to-back starts, tested, not implemented.** Pooled fantasy points across 142 goalies with a reasonable sample size, 53 back-to-back starts (a rest gap of one day or less) against 2,521 other starts. Observed a -0.34 fantasy point difference, but a two-sample t-test returned p=0.560, statistically indistinguishable from no effect at all given this sample size. Not built into v1. See `future_directions/back_to_back_adjustment.md`.
+**Back-to-back starts, tested, not implemented.** Pooled fantasy points across 142 goalies with a reasonable sample size, 53 back-to-back starts (a rest gap of one day or less) against 2,521 other starts. Observed a -0.34 fantasy point difference, but a two-sample t-test returned $p=0.560$, statistically indistinguishable from no effect at all given this sample size. Not built into v1. See `future_directions/back_to_back_adjustment.md`.
 
-**Opponent shot volume, implemented.** An opponent's raw goals-for rate was tested first and found too weak to build on (r=-0.137 against fantasy points). A stronger relationship was found and used instead: shots faced correlates with save percentage, r=0.260, pooled across goalies with full-game appearances only (to rule out goalies being pulled early after a bad start as a confound). A league-wide fitted line (`save_pctg ≈ 0.833 + 0.0023 × shots_against`) converts an opponent's typical shot volume into an expected shift in save percentage. This shift is split correctly between saves and goals against using the relevant scoring weights, and applied as an addition on top of each goalie's own baseline μ from Section 2, since a single goalie's own season doesn't provide enough data to fit this relationship individually.
+**Opponent shot volume, implemented.** An opponent's raw goals-for rate was tested first and found too weak to build on ($r=-0.137$ against fantasy points). A stronger relationship was found and used instead: shots faced correlates with save percentage, $r=0.260$, pooled across goalies with full-game appearances only (to rule out goalies being pulled early after a bad start as a confound). A league-wide fitted line:
 
-An exploratory extension checked whether individual goalies deviate from this league-wide relationship, using partial pooling (blending each goalie's own fitted slope with the league slope, weighted by how many of their own games exist). Found a real but modest pattern, goalies with a higher average save percentage tend to have flatter slopes (r=-0.284, p=0.0199, across 67 goalies), suggesting elite goaltending is somewhat less dependent on shot volume than average. This refinement is not yet wired into the main estimate, both because the effect is moderate (r² under 0.09) and because of a mild circularity risk in how it was measured (a goalie's own slope and average are both derived from the same games). See `future_directions/goalie_slope_partial_pooling.md`.
+$$
+\text{save\_pctg} \approx 0.833 + 0.0023 \times \text{shots\_against}
+$$
+
+converts an opponent's typical shot volume into an expected shift in save percentage. This shift is split correctly between saves and goals against using the relevant scoring weights, and applied as an addition on top of each goalie's own baseline $\mu$ from Section 2, since a single goalie's own season doesn't provide enough data to fit this relationship individually.
+
+An exploratory extension checked whether individual goalies deviate from this league-wide relationship, using partial pooling (blending each goalie's own fitted slope with the league slope, weighted by how many of their own games exist). Found a real but modest pattern, goalies with a higher average save percentage tend to have flatter slopes ($r=-0.284$, $p=0.0199$, across 67 goalies), suggesting elite goaltending is somewhat less dependent on shot volume than average. This refinement is not yet wired into the main estimate, both because the effect is moderate ($r^2$ under 0.09) and because of a mild circularity risk in how it was measured (a goalie's own slope and average are both derived from the same games). See `future_directions/goalie_slope_partial_pooling.md`.
 
 ---
 
@@ -158,30 +141,19 @@ These aren't commitments on a timeline, they're the directions under considerati
 - **Skater opponent-strength adjustment**, mirroring the goalie version using opponent goals/shots-against. Next priority once the base model is stable, see `future_directions/opponent_strength_for_skaters.md`.
 - **Wiring individual goalie slopes into the main estimate**, pending further validation of the partial-pooling approach and resolving the circularity concern noted above.
 - **Category league support**, extending custom scoring beyond points leagues to head-to-head category formats, see `future_directions/category_league_support.md`.
-- **Better μ estimate via lightweight regression.** Instead of (blended) rolling average, a simple, interpretable model (e.g., ridge regression) using a few added features, ice time, shot rate, opponent defensive strength, to estimate expected performance. This would replace *only* the μ estimate; the σ/P(A>B) machinery downstream stays the same. Kept intentionally simple (not a large model) because the amount of public per-player data available doesn't support anything more complex without overfitting.
-- **Tuning `k` and the EWMA half-life empirically**, rather than by comparison alone, e.g., checking which values would have produced the best-calibrated predictions against past data.
+- **Better $\mu$ estimate via lightweight regression.** Instead of (blended) rolling average, a simple, interpretable model (e.g., ridge regression) using a few added features, ice time, shot rate, opponent defensive strength, to estimate expected performance. This would replace *only* the $\mu$ estimate; the $\sigma$/$P(A>B)$ machinery downstream stays the same. Kept intentionally simple (not a large model) because the amount of public per-player data available doesn't support anything more complex without overfitting.
+- **Tuning $k$ and the EWMA half-life empirically**, rather than by comparison alone, e.g., checking which values would have produced the best-calibrated predictions against past data. A first cross-validated check (`tests/test_model.ipynb`) found $k \approx 15$ performed marginally better than $k=10$ for one player/split, worth broader validation before changing.
 
 ### Longer-term / larger changes, worth naming honestly as "maybe"
 - **Machine learning for performance projection.** If enough weekly data accumulates over a full season (predictions + actual outcomes), there could eventually be enough signal to train a small supervised model (e.g., gradient-boosted trees) predicting next-week fantasy output from a richer feature set. This is explicitly a "maybe, later" item, not a v1 goal, with only weekly-cadence data from one season, sample size will likely stay a real constraint, and an uninterpretable model would work against the project's whole point of showing *why* a call was made, not just what it was.
-- **Calibration-driven correction.** Since every prediction is logged with a confidence level and an eventual outcome, over a full season there will be enough data to check calibration directly, do "70% confidence" calls actually land around 70% of the time? If they're systematically over- or under-confident, that's a concrete, data-backed reason to adjust the model (e.g., scaling σ up or down), rather than a guess.
-- **Team-level matchup view.** Aggregating predicted μ/σ across a full projected lineup (yours vs. an opponent's) to produce an overall weekly matchup confidence and flag positions of relative weakness. Uses the same math as above, just summed across a roster.
+- **Calibration-driven correction.** Since every prediction is logged with a confidence level and an eventual outcome, over a full season there will be enough data to check calibration directly, do "70% confidence" calls actually land around 70% of the time? If they're systematically over- or under-confident, that's a concrete, data-backed reason to adjust the model (e.g., scaling $\sigma$ up or down), rather than a guess.
+- **Team-level matchup view.** Aggregating predicted $\mu$/$\sigma$ across a full projected lineup (yours vs. an opponent's) to produce an overall weekly matchup confidence and flag positions of relative weakness. Uses the same math as above, just summed across a roster.
 - **A learned team-strength rating** (Elo-style, updating game by game based on outcomes), rather than a rolling or pooled average, see `future_directions/team_strength_rating_model.md`.
 - **Faceoff scoring**, if a data source with raw won/lost counts (rather than just a percentage) is found.
-- **Injury / missed-game detection**, comparing a player's game log
-  against their team's schedule to flag unexplained absences, see
-  `future_directions/injury_status_detection.md`.
+- **Injury / missed-game detection**, comparing a player's game log against their team's schedule to flag unexplained absences, see `future_directions/injury_status_detection.md`.
 
 ---
 
 ## Version History
 
-- **v1** (current) - rolling EWMA μ (half-life 5) for recent form, flat
-  cumulative mean blended with prior-season stats (k=10) for
-  early-season shrinkage, P(A>B) comparison model derived from the
-  normal-difference property with formal correctness checks, goalie
-  opponent shot-volume adjustment (league-wide, based on a tested
-  shots-vs-save-percentage relationship). Cross-position z-scoring
-  planned but not implemented, turned out unnecessary for head-to-head
-  comparison (see Section 3). Back-to-back adjustment tested and found
-  statistically insignificant, not implemented. Skater
-  opponent-strength adjustment not yet built.
+- **v1** (current) - rolling EWMA $\mu$ (half-life 5) for recent form, flat cumulative mean blended with prior-season stats ($k=10$) for early-season shrinkage, $P(A>B)$ comparison model derived from the normal-difference property with formal correctness checks, goalie opponent shot-volume adjustment (league-wide, based on a tested shots-vs-save-percentage relationship). Cross-position z-scoring planned but not implemented, turned out unnecessary for head-to-head comparison (see Section 3). Back-to-back adjustment tested and found statistically insignificant, not implemented. Skater opponent-strength adjustment not yet built. Statistical correctness verified against simulation (`tests/test_model.ipynb`): EWMA half-life behavior, shrinkage's limiting cases, $P(A>B)$ vs. Monte Carlo, the variance-addition property, weekly-games scaling, and Shapiro-Wilk confirmation of the documented non-normality simplification.
