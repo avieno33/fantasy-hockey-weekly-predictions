@@ -69,14 +69,18 @@ def clean_goalie_log(log_df, numeric_columns=None):
     return df
 
 
-def build_full_skater_log(player_id, season, include_hits_blocks=True):
+def build_full_skater_log(player_id, season, include_hits_blocks=True,
+                           refresh_after_hours=6, force_refresh=False):
     """
     Pulls a skater's game log and builds every stat category that's
     sourceable: direct fields, derived fields (PPA, SHA), and
     hits/blocks from the boxscore. Returns an empty DataFrame if the
     player hasn't played this season, rather than erroring.
+    refresh_after_hours and force_refresh only matter for the current
+    season, a completed season's log is cached for good.
     """
-    log = get_game_log(player_id, season=season, force_refresh=False)
+    log = get_game_log(player_id, season=season,
+                       refresh_after_hours=refresh_after_hours, force_refresh=force_refresh)
 
     if log.empty:
         return log
@@ -115,65 +119,137 @@ def blend_mu_sigma(current_mu, current_sigma, prior_mu, prior_sigma, n, k=10):
     return blended_mu, blended_var**0.5
 
 
+def _scored_game_log(player_id, season, position, scoring_config, field_map,
+                      refresh_after_hours=6, force_refresh=False):
+    """
+    One season of a player's games, cleaned and scored under one
+    league's rules, one row per game with a fantasy_points column.
+    Returns None if the player has no usable games that season.
+    """
+    if position == "G":
+        log = get_game_log(player_id, season=season,
+                           refresh_after_hours=refresh_after_hours, force_refresh=force_refresh)
+        if log.empty:
+            return None
+        log = clean_goalie_log(log)
+    else:
+        log = build_full_skater_log(player_id, season,
+                                     refresh_after_hours=refresh_after_hours, force_refresh=force_refresh)
+
+    if log.empty:
+        return None
+
+    log = log.copy()
+    log["fantasy_points"] = apply_scoring(log, scoring_config, field_map)
+    return log
+
+
+def _mean_and_std(points_series):
+    """
+    Plain mean and standard deviation of a points series. One game has
+    no spread to measure, pandas gives NaN there, which would silently
+    poison every later calculation, so it's returned as 0.0 instead.
+    """
+    std = points_series.std() if len(points_series) > 1 else 0.0
+    return points_series.mean(), std
+
+
 def get_prior_season_stats(player_id, season, position, scoring_config, field_map):
     """
     Computes simple season-long mean and std from a completed season,
     used as the shrinkage prior. Not EWMA, the season is already over,
     so there's no recency to weight, just the overall level and spread.
+    A one-game season returns a std of 0.0 rather than NaN.
     """
-    if position == "G":
-        log = get_game_log(player_id, season=season, force_refresh=False)
-        if log.empty:
-            return None, None
-        log = clean_goalie_log(log)
-        log["fantasy_points"] = apply_scoring(log, scoring_config, field_map)
-    else:
-        log = build_full_skater_log(player_id, season)
-        if log.empty:
-            return None, None
-        log["fantasy_points"] = apply_scoring(log, scoring_config, field_map)
-
-    return log["fantasy_points"].mean(), log["fantasy_points"].std()
+    log = _scored_game_log(player_id, season, position, scoring_config, field_map)
+    if log is None:
+        return None, None
+    return _mean_and_std(log["fantasy_points"])
 
 
 def get_player_estimates(player_id, position, scoring_config, field_map,
-                           season, prior_season, half_life=5, k=10):
+                          season, prior_season, half_life=5, k=10,
+                          bridge_seasons=True, allow_prior_only=True, min_sample=15,
+                          refresh_after_hours=6, force_refresh=False):
     """
     Computes both estimates for a player: EWMA (recent form) and
     shrinkage-blended (season-level talent, leaning on the prior
     season early). scoring_config and field_map are required, this
     is meant to be called once per league for the same player, not
     tied to any single default league's rules.
+
+    In-season behavior, `season` is the season being played and
+    `prior_season` the one before it:
+
+    - bridge_seasons: the EWMA (recent form) runs over the prior
+      season's games followed by this season's, so early in the year
+      "recent form" isn't just two or three games. Once a season has
+      enough games the prior season's weight is negligible anyway (a
+      half-life of 5 puts it near zero after about 50 games). The
+      shrinkage estimate (season_mu, season_sigma) is unaffected,
+      it never uses the EWMA. Pass False for the old behavior.
+    - allow_prior_only: a player with no games yet this season (a
+      suspension, an injury, a late call-up) gets the prior season's
+      numbers, which is what the shrinkage formula gives at zero
+      games anyway, instead of None. Pass False to get None back.
+      A player with no games in either season still returns None.
+    - min_sample: flags low_confidence=True when current games plus
+      prior games is under this number. It's a flag only, it never
+      changes mu or sigma.
+
+    Returned keys: games_played, recent_mu, recent_sigma, season_mu,
+    season_sigma, prior_games, low_confidence.
     """
-    if position == "G":
-        log = get_game_log(player_id, season=season, force_refresh=False)
-        if log.empty:
-            return None
-        log = clean_goalie_log(log)
-        log["fantasy_points"] = apply_scoring(log, scoring_config, field_map)
+    current = _scored_game_log(player_id, season, position, scoring_config, field_map,
+                                refresh_after_hours=refresh_after_hours, force_refresh=force_refresh)
+    prior = _scored_game_log(player_id, prior_season, position, scoring_config, field_map)
+
+    if current is None and (prior is None or not allow_prior_only):
+        return None
+
+    current_points = current["fantasy_points"] if current is not None else pd.Series(dtype=float)
+    prior_points = prior["fantasy_points"] if prior is not None else pd.Series(dtype=float)
+    n_games = len(current_points)
+    prior_games = len(prior_points)
+
+    # season-level estimate, shrinkage toward the prior
+    prior_mu, prior_sigma = _mean_and_std(prior_points) if prior_games > 0 else (None, None)
+
+    if n_games > 0:
+        current_mu, current_sigma = _mean_and_std(current_points)
+        if prior_mu is not None:
+            season_mu, season_sigma = blend_mu_sigma(current_mu, current_sigma, prior_mu, prior_sigma,
+                                                     n=n_games, k=k)
+        else:
+            season_mu, season_sigma = current_mu, current_sigma
     else:
-        log = build_full_skater_log(player_id, season)
-        if log.empty:
-            return None
-        log["fantasy_points"] = apply_scoring(log, scoring_config, field_map)
+        # zero current games, blend_mu_sigma reduces to exactly the prior
+        season_mu, season_sigma = prior_mu, prior_sigma
 
-    prior_mu, prior_sigma = get_prior_season_stats(player_id, prior_season, position, scoring_config, field_map)
-
-    ewma_mu, ewma_sigma = compute_ewma_mu_sigma(log["fantasy_points"], half_life=half_life)
-
-    n_games = len(log)
-    current_mu = log["fantasy_points"].mean()
-    current_sigma = log["fantasy_points"].std() if n_games > 1 else 0
-
-    if prior_mu is not None:
-        blended_mu, blended_sigma = blend_mu_sigma(current_mu, current_sigma, prior_mu, prior_sigma, n=n_games, k=k)
+    # recent form, EWMA, optionally bridged across the season boundary
+    if bridge_seasons and prior_games > 0:
+        ewma_input = pd.concat([prior_points, current_points], ignore_index=True)
+    elif n_games > 0:
+        ewma_input = current_points
     else:
-        blended_mu, blended_sigma = current_mu, current_sigma
+        ewma_input = None
+
+    if ewma_input is not None:
+        ewma_mu, ewma_sigma = compute_ewma_mu_sigma(ewma_input, half_life=half_life)
+        recent_mu, recent_sigma = ewma_mu.iloc[-1], ewma_sigma.iloc[-1]
+        if pd.isna(recent_sigma):
+            # a single game in the series has no EWMA spread, fall back
+            # to the season-level spread rather than passing NaN along
+            recent_sigma = season_sigma
+    else:
+        recent_mu, recent_sigma = season_mu, season_sigma
 
     return {
         "games_played": n_games,
-        "recent_mu": ewma_mu.iloc[-1],
-        "recent_sigma": ewma_sigma.iloc[-1],
-        "season_mu": blended_mu,
-        "season_sigma": blended_sigma,
+        "recent_mu": recent_mu,
+        "recent_sigma": recent_sigma,
+        "season_mu": season_mu,
+        "season_sigma": season_sigma,
+        "prior_games": prior_games,
+        "low_confidence": (n_games + prior_games) < min_sample,
     }

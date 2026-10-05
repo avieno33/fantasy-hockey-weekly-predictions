@@ -8,7 +8,7 @@ raw data.
 
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
@@ -17,6 +17,12 @@ from difflib import SequenceMatcher
 
 CACHE_DIR = "data"
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+# A boxscore only gets cached once the game is over, since an in-progress
+# boxscore changes by the minute and would go stale on disk.
+FINAL_GAME_STATES = {"FINAL", "OFF"}
+
+SCHEDULE_COLUMNS = ["gameId", "gameDate", "gameType", "gameState", "awayTeam", "homeTeam"]
 
 
 # --- caching helpers -------------------------------------------------
@@ -132,12 +138,20 @@ def get_game_log(player_id, season=None, game_type=2, refresh_after_hours=6, for
     pulls fresh from fetch_game_log and caches the result. Handles an
     empty season gracefully (pre-season, or a player who wasn't in the
     NHL that season) rather than crashing.
+
+    A completed season never changes, so once a past season's log is
+    cached it's reused as long as the file exists, refresh_after_hours
+    only applies to the current season, where new games keep landing.
+    force_refresh overrides both.
     """
     season = season or CURRENT_SEASON
     key = f"gamelog_{player_id}_{season}"
     age = cache_age_hours(key)
+    season_is_completed = str(season) != CURRENT_SEASON
 
-    if not force_refresh and age is not None and age < refresh_after_hours:
+    cache_is_usable = age is not None and (season_is_completed or age < refresh_after_hours)
+
+    if not force_refresh and cache_is_usable:
         print(f"Loading game log for {player_id}, {season} from cache, {age:.1f} hours old")
         return load_from_cache(key)
 
@@ -157,15 +171,16 @@ def get_game_log(player_id, season=None, game_type=2, refresh_after_hours=6, for
 
 # --- boxscores, for hits and blocked shots ------------------------------
 
-def get_boxscore(game_id, refresh_after_hours=24, force_refresh=False):
+def get_boxscore(game_id, force_refresh=False):
     """
     Pulls the boxscore for a single game, cached by game id. A finished
-    game's boxscore never changes, so once cached, it's cached for good.
+    game's boxscore never changes, so once a finished game is cached
+    it's cached for good. A game that isn't finished yet is returned but
+    never cached, so a partial boxscore can't get stuck on disk.
     """
     key = f"boxscore_{game_id}"
-    age = cache_age_hours(key)
 
-    if not force_refresh and age is not None and age < refresh_after_hours:
+    if not force_refresh and cache_age_hours(key) is not None:
         return load_from_cache(key)
 
     url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
@@ -183,7 +198,7 @@ def get_boxscore(game_id, refresh_after_hours=24, force_refresh=False):
                 rows.append(row)
 
     boxscore_df = pd.DataFrame(rows)
-    if not boxscore_df.empty:
+    if not boxscore_df.empty and data.get("gameState") in FINAL_GAME_STATES:
         save_to_cache(boxscore_df, key)
     return boxscore_df
 
@@ -192,11 +207,15 @@ def get_hits_and_blocks(player_id, game_log, pause=0.3):
     """
     For every game in a player's game log, pulls that game's boxscore
     (cached, reused for other players in the same game later) and
-    extracts hits and blockedShots for this specific player.
+    extracts hits and blockedShots for this specific player. Only
+    pauses between real API calls, a cached boxscore costs no wait.
     """
     records = []
     for game_id in game_log["gameId"]:
+        was_cached = cache_age_hours(f"boxscore_{game_id}") is not None
         boxscore = get_boxscore(game_id)
+        if not was_cached:
+            time.sleep(pause)
         if boxscore.empty:
             continue
         player_row = boxscore[boxscore["playerId"] == player_id]
@@ -207,21 +226,80 @@ def get_hits_and_blocks(player_id, game_log, pause=0.3):
             "hits": player_row.iloc[0].get("hits", 0),
             "blockedShots": player_row.iloc[0].get("blockedShots", 0),
         })
-        time.sleep(pause)
-    return pd.DataFrame(records)
+    # explicit columns, so an empty result still merges cleanly on gameId
+    return pd.DataFrame(records, columns=["gameId", "hits", "blockedShots"])
 
 
 # --- schedule, for weekly game counts ---------------------------------
 
-def get_games_this_week(team_abbrev, week_start_date):
+def get_team_schedule(team_abbrev, season=None, refresh_after_hours=12, force_refresh=False):
     """
-    Returns the number of games a team plays in the week starting on
-    week_start_date (YYYY-MM-DD). NOT YET TESTED against a real
-    schedule, confirm against a team you know the schedule for before
-    trusting this in week01.
+    Pulls a team's full season schedule (preseason, regular season and
+    anything else the API lists) as one row per game, cached per team.
+    Uses the full-season endpoint rather than the weekly one, so any
+    date window works, including a league's odd-length first week.
+    Schedules do get changed (postponements), so the cache expires.
     """
-    url = f"https://api-web.nhle.com/v1/club-schedule/{team_abbrev}/week/{week_start_date}"
+    season = season or CURRENT_SEASON
+    key = f"schedule_{team_abbrev}_{season}"
+    age = cache_age_hours(key)
+
+    if not force_refresh and age is not None and age < refresh_after_hours:
+        schedule = load_from_cache(key)
+        schedule["gameDate"] = pd.to_datetime(schedule["gameDate"])
+        return schedule
+
+    url = f"https://api-web.nhle.com/v1/club-schedule-season/{team_abbrev}/{season}"
     response = requests.get(url)
     response.raise_for_status()
     data = response.json()
-    return len(data.get("games", []))
+
+    rows = [{
+        "gameId": game["id"],
+        "gameDate": game["gameDate"],
+        "gameType": game["gameType"],
+        "gameState": game.get("gameState"),
+        "awayTeam": game["awayTeam"]["abbrev"],
+        "homeTeam": game["homeTeam"]["abbrev"],
+    } for game in data.get("games", [])]
+
+    schedule = pd.DataFrame(rows, columns=SCHEDULE_COLUMNS)
+    if schedule.empty:
+        return schedule
+
+    schedule["gameDate"] = pd.to_datetime(schedule["gameDate"])
+    save_to_cache(schedule, key)
+    return schedule
+
+
+def get_games_in_window(team_abbrev, start_date, end_date, season=None, game_type=2):
+    """
+    Returns a team's games between start_date and end_date, both
+    inclusive (YYYY-MM-DD), regular season only by default so
+    preseason games can't inflate a count. gameDate is the date the
+    NHL lists for the game, so a late West Coast start still counts
+    on its listed day.
+    """
+    schedule = get_team_schedule(team_abbrev, season=season)
+    if schedule.empty:
+        return schedule
+
+    in_window = (
+        (schedule["gameDate"] >= pd.Timestamp(start_date)) &
+        (schedule["gameDate"] <= pd.Timestamp(end_date)) &
+        (schedule["gameType"] == game_type)
+    )
+    return schedule[in_window].reset_index(drop=True)
+
+
+def get_games_this_week(team_abbrev, week_start_date, days=7):
+    """
+    Returns the number of regular season games a team plays in the
+    window starting on week_start_date (YYYY-MM-DD) and lasting `days`
+    days, 7 by default. Pass a different `days` for a league week
+    that isn't seven days long. Checked against the TOR schedule, see
+    tests/test_src.ipynb.
+    """
+    start = pd.Timestamp(week_start_date)
+    end = start + timedelta(days=days - 1)
+    return len(get_games_in_window(team_abbrev, start, end))
