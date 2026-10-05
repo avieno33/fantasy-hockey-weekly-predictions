@@ -19,72 +19,91 @@ that often. See the Calibration Summary section below.
 
 ---
 
-## Calibration summary
+## Units
 
-Updated as predictions resolve. Not enough data yet to compute this
-meaningfully, needs enough predictions to fill each confidence bucket.
+Week 1 probabilities were **per game** (one average game for each player). From Week 2 on, probabilities are **weekly totals**: they are scaled by each player's team games that week, and goalies by expected starts. "3g" in a label means team games that week, not starts. Week 1 is scored both ways below.
 
-| Confidence bucket | Predictions | Correct | Actual hit rate |
+## Calibration summary (running)
+
+| Confidence | Picks | Won | Hit rate |
 |---|---|---|---|
-| 50-60% | — | — | — |
-| 60-70% | — | — | — |
-| 70-80% | — | — | — |
-| 80%+ | — | — | — |
+| 50-60% | 23 | 10 | 43.5% |
+| 60-70% | 6 | 2 | 33.3% |
+| 70-80% | 1 | 0 | 0.0% |
+| 80%+ | 0 | - | - |
 
-A well-calibrated model's 60-70% bucket should resolve correct
-roughly 60-70% of the time, not 90%, not 40%. Once there's enough data
-here, this becomes the honest answer to "is this model good," see
-METHODOLOGY.md's calibration-driven correction roadmap item.
-
----
+Week 1 only so far (30 scored matchups). That is far too few to say anything about calibration, and each bucket is only a handful of coin flips. Lower confidence did not do worse than higher confidence, but nothing here is distinguishable from noise yet.
 
 ## Week 1
 
-Logged before puck drop, season opens Sept 29, 2026. League 1 hasn't
-drafted yet, excluded this week.
+### Results
 
-### My picks
+| Measure | Result | Brier |
+|---|---|---|
+| Per-game, all matchups | 12.0 of 30 (40.0%) | 0.269 |
+| Weekly total, all matchups | 11.0 of 30 (36.7%) | 0.276 |
+| Equal-games matchups only | 6.0 of 13 (46.2%) | 0.267 |
 
-| League | Position | My Player | Opponent | P(mine wins) | Result | Correct? |
+Average confidence on the equal-games subset was 57.6%. Brier reference: 0.25 is what always predicting 50% scores, so 0.269 is slightly worse than a coin flip on 30 matchups. Not enough to change the model.
+
+Calibration bins from the notebook:
+
+| Bin | n | Avg confidence | Hit rate |
+|---|---|---|---|
+| 50-55% | 15 | 52.3% | 26.7% |
+| 55-60% | 8 | 56.9% | 75.0% |
+| 60%+ | 7 | 63.9% | 28.6% |
+
+### Headline picks
+
+| Pick | League | Result |
+|---|---|---|
+| Tim Stützle | 2 | Lost, 2.90 vs 4.90 (he played 1 game, the opponent 2) |
+| Connor McDavid | 3 | Won, 9.45 vs 1.22 |
+| Porter Martone | 3 | Lost, 0.20 vs 1.32 |
+
+### Sleepers (first games only)
+
+| Player | Games | League 2 | League 3 |
+|---|---|---|---|
+| Perreault | 4 | +46% | +29% |
+| Kreider | 2 | +76% | +27% |
+| McMann | 3 | +57% | +38% |
+
+Percent changes are against last season's per-game baseline, from only a few games, so treat them as a direction and not a verdict.
+
+## Week 2
+
+### Headline picks
+
+| Pick | League | Probability |
+|---|---|---|
+| Nathan MacKinnon | 2 | 87.9% |
+| Connor McDavid | 3 | 82.0% |
+| Jeremy Swayman | 1 | 71.5% |
+
+### Slate
+
+| League | Favored | Avg confidence |
+|---|---|---|
+| 1 | 6 of 13 | 51.8% |
+| 2 | 10 of 13 | 60.8% |
+| 3 | 13 of 18 | 55.8% |
+
+Goalie start shares used: Swayman .66, Oettinger .66, Blackwood .44, Vejmelka .77, Wallstedt .40, Dobes .51. The most lopsided matchup is Harley vs Karlsson in league 3, at 11.5%.
+
+### Sleepers
+
+| Player | Rostered | Games | Pts/g this season (last) | Shots/g | Shooting % | TOI |
 |---|---|---|---|---|---|---|
-| League 2 | LW | Tim Stutzle | Will Smith | 64.1% | pending | pending |
-| League 3 | C | Connor McDavid | Brady Tkachuk | 63.1% | pending | pending |
-| League 3 | RW | Porter Martone | Logan Stankoven | 73.8% | pending | pending |
+| Paul Cotter (VAN) | 28% | 4 | 1.50 (0.19) | 1.75 (0.77) | 57% (15%) | 15:22 (10:41) |
+| Eli Tolvanen (NYR) | 6% | 4 | 0.75 (0.46) | 1.50 (1.81) | 50% (9%) | 13:29 (16:02) |
+| Tommy Novak (PIT) | 22% | 2 | 2.00 (0.51) | 1.50 (1.59) | 67% (12%) | 15:23 (14:17) |
 
-Notes at the time of the pick:
-- **Tim Stutzle vs. Will Smith** and **Connor McDavid vs. Brady
-  Tkachuk** are the two most trustworthy calls this week, both built
-  on a full season of data for both players.
-- **Porter Martone vs. Logan Stankoven** has the highest raw
-  confidence, but treat with real caution, Martone has only 9 games
-  of prior-season data (10 points), so this leans on a genuinely thin,
-  noisy prior rather than an established one.
-
-Full position-by-position breakdown (not just the 3 headline picks):
-League 2 favored in 11 of 13 comparable slots (53.6% average edge),
-League 3 favored in 11 of 17 (53.4% average edge). See
-`notebooks/week01_matchup_calls.ipynb` for every comparison.
-
-### Sleeper picks
-
-| Player | Position | Leagues | Thesis | Result |
-|---|---|---|---|---|
-| Gabe Perreault | RW | League 2, 3 | Trending up (51-59% above own baseline), possible top-line role | pending |
-| Chris Kreider | LW | League 2, 3 | Speculative, reported top-line practice reps in Montreal | pending |
-| Bobby McMann | LW | League 2, 3 | Real, already-completed trade TOR → SEA, +0.5 pts/game since | pending |
-
-All three under 17% rostered on Yahoo as of 09/17/26. Full reasoning
-and plots in `notebooks/week01_matchup_calls.ipynb`.
+Cotter and Novak are mostly shooting-percentage luck: their shot volume is flat. Cotter's ice time did rise, which is the better sign. Tolvanen's shot volume and ice time are both down, so he is the riskiest of the three.
 
 ### What to check next week
 
-- Did Perreault's late-2025-26 trend (up) carry into real 2026-27
-  games, and did any line change actually happen?
-- Did Kreider's speculative top-line placement in Montreal materialize?
-- Does McMann's Seattle bump hold up in real games?
-- Two bugs were fixed while building week 1 (a name-typo mismatch,
-  and a Carter Hart search-resolution issue), worth confirming no
-  similar issue turns up with a new week's roster of names.
-- Does the current prediction and sleeper format make sense (i.e., multiple League scoring make sense)?  
-
----
+- Did the 70%+ picks win?
+- Did goalie expected starts match actual starts?
+- Did the sleepers keep their per-game rates or regress toward last season?
