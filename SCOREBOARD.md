@@ -23,16 +23,23 @@ that often. See the Calibration Summary section below.
 
 Week 1 probabilities were **per game** (one average game for each player). From Week 2 on, probabilities are **weekly totals**: they are scaled by each player's team games that week, and goalies by expected starts. "3g" in a label means team games that week, not starts. Week 1 is scored both ways below.
 
+Week 3 was a **late start**: predictions were made Tuesday Oct 13, after Monday's games, so the window is Tue Oct 13 to Sun Oct 18 and is not a full Yahoo week.
+
 ## Calibration summary (running)
+
+Weeks 1 and 2 combined (74 scored matchups). The two weeks use different units (per-game and weekly total), so read this as a running tally, not a clean sample.
 
 | Confidence | Picks | Won | Hit rate |
 |---|---|---|---|
-| 50-60% | 23 | 10 | 43.5% |
-| 60-70% | 6 | 2 | 33.3% |
-| 70-80% | 1 | 0 | 0.0% |
-| 80%+ | 0 | - | - |
+| 50-60% | 38 | 18 | 47.4% |
+| 60-70% | 24 | 13 | 54.2% |
+| 70-80% | 8 | 4 | 50.0% |
+| 80%+ | 4 | 3 | 75.0% |
+| **All** | **74** | **38** | **51.4%** |
 
-Week 1 only so far (30 scored matchups). That is far too few to say anything about calibration, and each bucket is only a handful of coin flips. Lower confidence did not do worse than higher confidence, but nothing here is distinguishable from noise yet.
+Equal-games matchups only (where the model has no schedule edge): Week 1 6 of 13, Week 2 16 of 31, so **22 of 44 (50%)** so far. Matchups with unequal games: Week 2 went 10 of 13.
+
+Far too few picks to say anything about calibration. Nothing here is distinguishable from noise yet.
 
 ## Week 1
 
@@ -70,40 +77,74 @@ Calibration bins from the notebook:
 | Kreider | 2 | +76% | +27% |
 | McMann | 3 | +57% | +38% |
 
-Percent changes are against last season's per-game baseline, from only a few games, so treat them as a direction and not a verdict.
+Percent changes are against last season's per-game baseline, from only a few games, so treat them as a direction and not a verdict. League 1 is not shown.
 
 ## Week 2
 
+### Results
+
+| Measure | Result |
+|---|---|
+| All matchups | 26.0 of 44 picks won (59.1%), Brier 0.244 |
+| League 1 | 7 of 13 (53.8%), Brier 0.251 |
+| League 2 | 8 of 13 (61.5%), Brier 0.216 |
+| League 3 | 11 of 18 (61.1%), Brier 0.260 |
+| Unequal games (predicted) | 10 of 13 |
+| Equal games (predicted) | 16 of 31 |
+
+Brier 0.244 is a hair better than the 0.250 that always predicting 50% scores. One week, so not evidence of skill.
+
+| Confidence | n | Won | Avg confidence | Hit rate |
+|---|---|---|---|---|
+| 50-60% | 15 | 8 | 53.8% | 53.3% |
+| 60-70% | 18 | 11 | 65.2% | 61.1% |
+| 70-80% | 7 | 4 | 75.1% | 57.1% |
+| 80%+ | 4 | 3 | 85.9% | 75.0% |
+
+What I take from it:
+- The wins came mostly where game counts differed. On equal-game matchups the model was 16 of 31 (52%). The schedule edge is working; separating two similar players is not, yet.
+- The weekly point estimates are well centred: mean expected 8.00 vs mean actual 8.03 points per player, correlation 0.44. Skaters came in 0.25 below expectation on average, goalies 1.84 above.
+- Games missed to injury or scratches (Demidov 0 of 3, Marchand 1 of 2, Dobes 1 of 3) cost several slots. The model assumes everyone plays every team game.
+- Goalies: 5 of 6 picks won, but all twelve goalies appeared in 30 games against 22.5 expected from last season's start share. Watching whether early-season usage keeps running above start share. No model change on one week.
+
 ### Headline picks
 
-| Pick | League | Probability |
-|---|---|---|
-| Nathan MacKinnon | 2 | 87.9% |
-| Connor McDavid | 3 | 82.0% |
-| Jeremy Swayman | 1 | 71.5% |
+| Pick | League | Probability | Result |
+|---|---|---|---|
+| Nathan MacKinnon | 2 | 87.9% | Won, 12.10 vs 8.60 (3 games each) |
+| Connor McDavid | 3 | 82.0% | Lost, 12.88 vs 13.68 (2 games each) |
+| Jeremy Swayman | 1 | 71.5% | Won, 11.00 vs 3.90 (3 games vs 2) |
 
-### Slate
+2 of 3. McDavid's loss was by under a point, a normal 1-in-5 outcome at 82%.
 
-| League | Favored | Avg confidence |
-|---|---|---|
-| 1 | 6 of 13 | 51.8% |
-| 2 | 10 of 13 | 60.8% |
-| 3 | 13 of 18 | 55.8% |
+### Biggest misses
 
-Goalie start shares used: Swayman .66, Oettinger .66, Blackwood .44, Vejmelka .77, Wallstedt .40, Dobes .51. The most lopsided matchup is Harley vs Karlsson in league 3, at 11.5%.
+| Matchup | League | Model said | Result |
+|---|---|---|---|
+| McDavid vs Hischier | 3 | 82% | 12.88 vs 13.68 |
+| Porter Martone vs Mitch Marner | 3 | 73% | 5.42 vs 15.48 |
+| Chychrun vs Cole Hutson | 2 | 69% | 2.00 vs 6.15 |
+| Andersson vs Hronek | 3 | 22% | 3.67 vs 2.30 (I won) |
+| Elias Pettersson vs Quinn Hughes | 1 | 22% | 7.00 vs 6.30 (I won) |
 
 ### Sleepers
 
-| Player | Rostered | Games | Pts/g this season (last) | Shots/g | Shooting % | TOI |
+The pre-week process numbers (4 games or fewer, first week of the season):
+
+| Player | Rostered | GP 2026-27 | Pts/g this season (last) | Shots/g | Shooting % | TOI |
 |---|---|---|---|---|---|---|
-| Paul Cotter (VAN) | 28% | 4 | 1.50 (0.19) | 1.75 (0.77) | 57% (15%) | 15:22 (10:41) |
-| Eli Tolvanen (NYR) | 6% | 4 | 0.75 (0.46) | 1.50 (1.81) | 50% (9%) | 13:29 (16:02) |
+| Paul Cotter (VAN) | 28% | 4 | 1.50 (0.19) | 1.75 (0.77) | 57% (15%) | 15:13 (10:41) |
+| Eeli Tolvanen (NYR) | 6% | 4 | 0.75 (0.46) | 1.50 (1.81) | 50% (9%) | 13:29 (16:02) |
 | Tommy Novak (PIT) | 22% | 2 | 2.00 (0.51) | 1.50 (1.59) | 67% (12%) | 15:23 (14:17) |
 
-Cotter and Novak are mostly shooting-percentage luck: their shot volume is flat. Cotter's ice time did rise, which is the better sign. Tolvanen's shot volume and ice time are both down, so he is the riskiest of the three.
+Week 2 fantasy points per game against last season's per-game average, under each league's scoring:
 
-### What to check next week
+| Player | Week 2 games | League 1 | League 2 | League 3 |
+|---|---|---|---|---|
+| Cotter | 3 | -23% | -21% | -46% |
+| Tolvanen | 3 | -24% | -15% | -30% |
+| Novak | 4 | +6% | +11% | -39% |
 
-- Did the 70%+ picks win?
-- Did goalie expected starts match actual starts?
-- Did the sleepers keep their per-game rates or regress toward last season?
+None of the three beat last season's baseline in a convincing way.
+- **Hot shooting percentages did not last.** Cotter's 57% and Novak's 67% in Week 1 became 0% and 14% in Week 2.
+- **Novak's role never changed.** His ice time (15.4 to 15.1 minutes) and shots (1.50 to 1.75 per game) held, and his
