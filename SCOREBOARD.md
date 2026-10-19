@@ -25,21 +25,25 @@ Week 1 probabilities were **per game** (one average game for each player). From 
 
 Week 3 was a **late start**: predictions were made Tuesday Oct 13, after Monday's games, so the window is Tue Oct 13 to Sun Oct 18 and is not a full Yahoo week.
 
+## Model version
+
+All predictions so far use **model v1**, unchanged since Week 1. It stays frozen through Week 6. Candidate changes (goalie start share that blends this season's starts, a probability of playing each game, credibility weighting for thin-data players) are being tested on the side only. Review date: **Monday Nov 9**, with the switch rule written down before looking at the results. From Week 4 on, each prediction file carries a `model_version` column.
+
 ## Calibration summary (running)
 
-Weeks 1 and 2 combined (74 scored matchups). The two weeks use different units (per-game and weekly total), so read this as a running tally, not a clean sample.
+Weeks 1 to 3 combined (119 scored matchups). Week 1 used per-game probabilities and Weeks 2 and 3 used weekly totals, so read this as a running tally, not a clean sample.
 
 | Confidence | Picks | Won | Hit rate |
 |---|---|---|---|
-| 50-60% | 38 | 18 | 47.4% |
-| 60-70% | 24 | 13 | 54.2% |
-| 70-80% | 8 | 4 | 50.0% |
-| 80%+ | 4 | 3 | 75.0% |
-| **All** | **74** | **38** | **51.4%** |
+| 50-60% | 53 | 26 | 49.1% |
+| 60-70% | 39 | 21 | 53.8% |
+| 70-80% | 16 | 12 | 75.0% |
+| 80%+ | 11 | 9 | 81.8% |
+| **All** | **119** | **68** | **57.1%** |
 
-Equal-games matchups only (where the model has no schedule edge): Week 1 6 of 13, Week 2 16 of 31, so **22 of 44 (50%)** so far. Matchups with unequal games: Week 2 went 10 of 13.
+Equal-games matchups only (where the model has no schedule edge): Week 1 6 of 13, Week 2 16 of 31, Week 3 28 of 43, so **50 of 87 (57.5%)** so far. Matchups with unequal games: Week 2 went 10 of 13 and Week 3 went 2 of 2.
 
-Far too few picks to say anything about calibration. Nothing here is distinguishable from noise yet.
+Hit rates now rise with confidence in every bucket, which is the direction we want. But the same players appear in all three leagues, so 119 matchups is fewer independent bets than it sounds. At this size the standard error on a hit rate is about 5 points, and it would take roughly 600 matchups to tell 55% from 50%. Treat this as encouraging, not proven.
 
 ## Week 1
 
@@ -147,4 +151,80 @@ Week 2 fantasy points per game against last season's per-game average, under eac
 
 None of the three beat last season's baseline in a convincing way.
 - **Hot shooting percentages did not last.** Cotter's 57% and Novak's 67% in Week 1 became 0% and 14% in Week 2.
-- **Novak's role never changed.** His ice time (15.4 to 15.1 minutes) and shots (1.50 to 1.75 per game) held, and his
+- **Novak's role never changed.** His ice time (15.4 to 15.1 minutes) and shots (1.50 to 1.75 per game) held, and his fantasy points per game ended close to last season's (+6% and +11% in leagues 1 and 2).
+
+## Week 3 (late start, Tue Oct 13 to Sun Oct 18)
+
+### Results
+
+| Measure | Result |
+|---|---|
+| All matchups | 30 of 45 picks won (66.7%), Brier 0.200 |
+| League 1 | 10 of 13 (76.9%), Brier 0.210 |
+| League 2 | 8 of 14 (57.1%), Brier 0.200 |
+| League 3 | 12 of 18 (66.7%), Brier 0.192 |
+| Unequal games (predicted) | 2 of 2 |
+| Equal games (predicted) | 28 of 43 |
+
+Brier 0.200 is clearly better than the 0.250 of always predicting 50%. It is still one week of overlapping matchups.
+
+| Confidence | n | Won | Hit rate |
+|---|---|---|---|
+| 50-60% | 15 | 8 | 53.3% |
+| 60-70% | 15 | 8 | 53.3% |
+| 70-80% | 8 | 8 | 100% |
+| 80%+ | 7 | 6 | 85.7% |
+
+Weeks 2 and 3 combined (both weekly totals): 56 of 89 (62.9%).
+
+What I take from it:
+- I expected a near coin flip, because only two matchups had unequal games. The equal-games record was 28 of 43 (65%), so the model separated similar players better than Week 2 suggested. Across all three weeks the equal-games record is 50 of 87 (57%).
+- Point estimates held up: mean expected 8.18 vs mean actual 8.53, correlation 0.55 (0.44 in Week 2). Goalies came in 0.47 above expectation and skaters 0.32.
+- Goalies played 21 games against 20.1 expected, so Week 2's gap (30 vs 22.5) did not repeat. Good reason not to change the start-share rule on one week of data.
+- Every game-count mismatch was a goalie, so skaters played all their predicted games this week, unlike Week 2.
+
+### Headline picks
+
+2 of 3. Stutzle lost at 85% (4.90 vs 7.80). Aho and Sergachev each won by under a point.
+
+### Sleepers
+
+| Player | Rostered | Week 3 games | Thesis | Held? |
+|---|---|---|---|---|
+| Devon Levi (G, EDM) | 35% | 2 | Taking the starting job; start share of 2 or more of 3 games | Yes. 2 of 3 starts, save percentage .860 to .940, but fantasy points flat (1 win in 2 starts) |
+| Trevor Connelly (VGK) | 13% | 3 | Ice time stays above 15 minutes | No. 14.5 minutes; points +51% to +59% came from 40% shooting while shots fell |
+| Shane Pinto (OTT) | 22% | 3 | Extra ice time keeps him above last season | No. 19% to 32% below last season in every league; ice time back to 18.0 minutes |
+
+1 of 3 on its own thesis, which is a record of how the method does and not evidence about it. Two weeks of sleepers so far: Week 2 went 0 of 3 against the last-season baseline and Week 3 went 1 of 3. Levi's actual start share (3 of 5, then 2 of 3) is a case a start share that blends this season's starts would handle better, so it goes on the list of v2 candidates for the Week 6 review.
+
+## Week 4 (Mon Oct 19 to Sun Oct 25), predictions committed before games
+
+45 matchups (league 1: 13, league 2: 14, league 3: 18), model v1, weekly totals. I'm favored in 27 of 45: league 1 in 6 of 13 (49.0% average win probability), league 2 in 10 of 14 (52.5%), league 3 in 11 of 18 (54.0%). 20 of the 45 have unequal game counts, 9 of them in league 1.
+
+### Headline picks
+
+| Pick | League | Probability | Result |
+|---|---|---|---|
+| Connor McDavid over Sidney Crosby | 3 | 90% | Pending |
+| Nathan MacKinnon over William Nylander | 2 | 71% | Pending |
+| Cale Makar over Jakob Chychrun | 1 | 94% (Chychrun 6%) | Pending |
+
+Makar's call is mostly the schedule (4 games vs 2). McDavid's and MacKinnon's are equal-games calls where per-game and recent form agree.
+
+### Sleepers
+
+| Player | Team | Rostered | Games this week | Thesis |
+|---|---|---|---|---|
+| Adam Edstrom | NSH | 8% | 3 | The 4 goals are a 27% shooting streak and won't last, but ice time and shots are up and he's above last season's average in all 8 games. |
+| Michael Brandsegg-Nygard | DET | 14% | 3 | Shots nearly doubled and ice time is up at a normal 9% shooting rate, but about half his points came in two games, so expect spiky weeks. |
+| Boone Jenner | WSH | 17% | 2 | Not a breakout: points per game match last season, but shots are up about 40%. Only 2 team games this week. |
+
+They will be graded against the model's own expectation (`season_mu`), not just last season's average.
+
+## What to check next week
+
+- Grade Week 4 and update the running calibration table (119 matchups so far).
+- Whether the 2-game-week calls hold up, especially Chychrun in all three leagues and Makar's 4 games.
+- Goalie usage against start share again (Blackwood at 0.44 on 4 games; the Week 3 gap did not repeat).
+- Equal-games record against 50 of 87 so far.
+- Model review is Monday Nov 9, after Week 6. No model change before then.
